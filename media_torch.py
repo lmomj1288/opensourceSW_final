@@ -1,5 +1,3 @@
-# mediapipe mp_selfie_segmentation 사용하는 게 아니라 resnet 기반 모델 사용 코드 
-
 import torch
 import torchvision
 from torchvision import transforms
@@ -9,21 +7,45 @@ from PIL import Image
 
 class DeepLabSegmentation:
     def __init__(self):
-        # DeepLab-V3+ 모델 로드 (사전 학습된 모델)
-        # self.model = torchvision.models.segmentation.deeplabv3_resnet101(pretrained=True) # computation issue로 inference가 너무 느림
         self.model = torchvision.models.segmentation.deeplabv3_resnet50(pretrained=True)
         self.model.eval()
         if torch.cuda.is_available():
             self.model = self.model.cuda()
         
-        # 이미지 전처리를 위한 변환 정의
         self.transform = transforms.Compose([
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406], 
                               std=[0.229, 0.224, 0.225])
         ])
 
-    def process_image(self, image_path, bg_color=(192, 192, 192)):
+    def get_edge_mask(self, mask, method='canny', thickness=3):
+        """
+        마스크에서 edge를 추출하는 함수
+        method: 'canny' 또는 'contour' 선택 가능
+        thickness: edge의 두께
+        """
+        if method == 'canny':
+            # Canny edge detection 사용
+            edges = cv2.Canny(mask.astype(np.uint8) * 255, 100, 200)
+            # edge를 두껍게 만들기
+            kernel = np.ones((thickness, thickness), np.uint8)
+            edges = cv2.dilate(edges, kernel, iterations=1)
+            
+            # 빨간색 edge mask 생성
+            colored_edges = np.zeros((edges.shape[0], edges.shape[1], 3), dtype=np.uint8)
+            colored_edges[edges > 0] = [0, 0, 255]  # BGR 형식으로 빨간색 지정
+            return colored_edges
+        
+        elif method == 'contour':
+            # Contour 검출 사용
+            contours, _ = cv2.findContours(mask.astype(np.uint8), 
+                                         cv2.RETR_EXTERNAL, 
+                                         cv2.CHAIN_APPROX_SIMPLE)
+            edge_mask = np.zeros((mask.shape[0], mask.shape[1], 3), dtype=np.uint8)
+            cv2.drawContours(edge_mask, contours, -1, (0, 0, 255), thickness)  # BGR 형식으로 빨간색 지정
+            return edge_mask
+
+    def process_image(self, image_path, bg_color=(192, 192, 192), edge_method='canny'):
         # 이미지 로드 및 전처리
         image = Image.open(image_path).convert('RGB')
         input_tensor = self.transform(image)
@@ -35,12 +57,11 @@ class DeepLabSegmentation:
         with torch.no_grad():
             output = self.model(input_batch)['out'][0]
         
-        # 클래스별 확률을 계산하고 가장 높은 확률의 클래스를 선택
         output_predictions = output.argmax(0).cpu().numpy()
 
         # 전경 마스크 생성 (사람 클래스 = 15)
         mask = np.zeros_like(output_predictions)
-        mask[output_predictions == 15] = 1  # 사람 클래스에 대한 마스크
+        mask[output_predictions == 15] = 1
 
         # 마스크 후처리
         mask = cv2.medianBlur(mask.astype(np.uint8), 7)
@@ -49,43 +70,32 @@ class DeepLabSegmentation:
         mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
         mask = cv2.GaussianBlur(mask, (7,7), 0)
 
+        # edge 추출 (빨간색)
+        colored_edge_mask = self.get_edge_mask(mask, method=edge_method, thickness=3)
+
         # 원본 이미지를 numpy 배열로 변환
         original_image = np.array(image)
 
-        # 배경 이미지 생성
-        bg_image = np.zeros_like(original_image)
-        bg_image[:] = bg_color
+        # 원본 이미지와 edge 합성
+        output_image = cv2.addWeighted(original_image, 1, colored_edge_mask, 1, 0)
 
-        # 마스크를 3채널로 확장
-        mask_3channel = np.stack([mask] * 3, axis=2)
-
-        # 알파 블렌딩으로 이미지 합성
-        output_image = cv2.convertScaleAbs(
-            original_image * mask_3channel + bg_image * (1 - mask_3channel)
-        )
-
-        # 마스크 시각화를 위한 이미지 생성
-        mask_visualization = (mask * 255).astype(np.uint8)
-        mask_visualization = cv2.cvtColor(mask_visualization, cv2.COLOR_GRAY2BGR)
-
-        return output_image, mask_visualization
+        return output_image, colored_edge_mask
 
 def main():
-    image_path = "C:/Users/lmomj/Desktop/opensource/project/titanic.jpg"  # 이미지 경로를 수정하세요
+    image_path = "C:/Users/lmomj/Desktop/opensource/final/movies/bakha.jpg"
     
     try:
         segmentation = DeepLabSegmentation()
-        output_image, mask_image = segmentation.process_image(image_path)
+        output_image, edge_mask = segmentation.process_image(image_path, edge_method='canny')
 
         # 결과 표시
         cv2.imshow('Original Image', cv2.imread(image_path))
-        cv2.imshow('DeepLab Segmentation Result', output_image)
-        cv2.imshow('Segmentation Mask', mask_image)
+        cv2.imshow('Red Edge Mask', edge_mask)
+        cv2.imshow('Image with Red Edge', output_image)
 
         # 결과 저장
-        cv2.imwrite('deeplab_segmentation_result.jpg', output_image)
-        cv2.imwrite('deeplab_segmentation_mask.jpg', mask_image)
-
+        cv2.imwrite('deeplab_red_edge_mask.jpg', edge_mask)
+        
         cv2.waitKey(0)
         cv2.destroyAllWindows()
 
