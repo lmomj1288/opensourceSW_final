@@ -42,7 +42,7 @@ class PoseMatchingSystem:
         right_elbow = landmarks.landmark[self.mp_pose.PoseLandmark.RIGHT_ELBOW]
         left_wrist = landmarks.landmark[self.mp_pose.PoseLandmark.LEFT_WRIST]
         right_wrist = landmarks.landmark[self.mp_pose.PoseLandmark.RIGHT_WRIST]
-
+    
         # 팔의 각도 계산
         def calculate_angle(a, b, c):
             a = np.array([a.x, a.y])
@@ -57,18 +57,40 @@ class PoseMatchingSystem:
                 
             return angle
 
-        # 양쪽 팔의 각도 계산
+        # 수평 각도 계산 (어깨-손목)
+        def calculate_horizontal_angle(shoulder, wrist):
+            dx = wrist.x - shoulder.x
+            dy = wrist.y - shoulder.y
+            angle = np.abs(np.degrees(np.arctan2(dy, dx)))
+            return angle
+
+        # 팔꿈치가 펴져있는지 확인 (팔꿈치 각도)
         left_arm_angle = calculate_angle(left_wrist, left_elbow, left_shoulder)
         right_arm_angle = calculate_angle(right_wrist, right_elbow, right_shoulder)
 
-        # 팔이 수평에 가깝게 펴져 있는지 확인 (160도 이상)
-        arms_spread = (left_arm_angle > 160 and right_arm_angle > 160)
-        
-        # 양 팔의 높이가 비슷한지 확인
-        height_difference = abs(left_wrist.y - right_wrist.y)
-        similar_height = height_difference < 0.1
+        # 수평으로 펴져있는지 확인
+        left_horizontal = calculate_horizontal_angle(left_shoulder, left_wrist)
+        right_horizontal = calculate_horizontal_angle(right_shoulder, right_wrist)
 
-        return arms_spread and similar_height
+        # 조건 검사
+        # 1. 팔꿈치가 충분히 펴져있는지 (165도 이상)
+        arms_straight = (left_arm_angle > 165 and right_arm_angle > 165)
+        
+        # 2. 팔이 수평에 가까운지 (수평 = 0도 또는 180도)
+        left_is_horizontal = (left_horizontal < 20 or left_horizontal > 160)
+        right_is_horizontal = (right_horizontal < 20 or right_horizontal > 160)
+        arms_horizontal = left_is_horizontal and right_is_horizontal
+        
+        # 3. 양팔의 높이가 비슷한지
+        height_difference = abs(left_wrist.y - right_wrist.y)
+        similar_height = height_difference < 0.05  # 더 엄격한 높이 차이 제한
+        
+        # 4. 팔이 충분히 벌어져 있는지
+        width_difference = abs(left_wrist.x - right_wrist.x)
+        arms_spread_wide = width_difference > 0.4  # 최소 벌림 너비 설정
+        
+        # 모든 조건을 만족해야 성공
+        return arms_straight and arms_horizontal and similar_height and arms_spread_wide
 
     def process_frame(self, frame, bg_color=(192, 192, 192)):
         # 포즈 감지
@@ -112,9 +134,21 @@ class PoseMatchingSystem:
             frame_resized * mask_3channel + bg_image * (1 - mask_3channel)
         )
 
-        # 포즈 매칭 점수를 화면에 표시
+        # 포즈 매칭 점수와 가이드라인 표시
         cv2.putText(output_image, f"Pose Score: {pose_score}", 
                     (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+        
+        # 포즈가 인식되면 추가 정보 표시
+        if pose_results.pose_landmarks:
+            landmarks = pose_results.pose_landmarks
+            left_wrist = landmarks.landmark[self.mp_pose.PoseLandmark.LEFT_WRIST]
+            right_wrist = landmarks.landmark[self.mp_pose.PoseLandmark.RIGHT_WRIST]
+            height_diff = abs(left_wrist.y - right_wrist.y)
+            width_diff = abs(left_wrist.x - right_wrist.x)
+            
+            info_text = f"Height Diff: {height_diff:.3f}, Width: {width_diff:.3f}"
+            cv2.putText(output_image, info_text, 
+                       (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
 
         return output_image, pose_score
 
