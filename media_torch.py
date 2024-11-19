@@ -18,7 +18,7 @@ class DeepLabSegmentation:
                               std=[0.229, 0.224, 0.225])
         ])
 
-    def get_edge_mask(self, mask, method='canny', thickness=3):
+    def get_edge_mask(self, mask, method='canny', thickness=5):
         """
         마스크에서 edge를 추출하는 함수
         method: 'canny' 또는 'contour' 선택 가능
