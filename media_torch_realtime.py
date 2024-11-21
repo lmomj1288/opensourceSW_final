@@ -123,7 +123,8 @@ class PoseTemplateSystem:
 
 def main():
     # 이미지 경로 설정
-    image_path = "C:/Users/lmomj/Desktop/opensource/final/movies/bakha.jpg"
+    # image_path = "C:/Users/lmomj/Desktop/opensource/final/movies/bakha.jpg"
+    image_path = "C:/Users/lmomj/Desktop/opensource/final/movies/bakha.jpg"    
     
     try:
         # 시스템 초기화
