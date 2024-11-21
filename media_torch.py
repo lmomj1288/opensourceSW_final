@@ -88,16 +88,16 @@ def main():
         segmentation = DeepLabSegmentation()
         output_image, edge_mask = segmentation.process_image(image_path, edge_method='canny')
 
-        # # 결과 표시
-        # cv2.imshow('Original Image', cv2.imread(image_path))
-        # cv2.imshow('Red Edge Mask', edge_mask)
-        # cv2.imshow('Image with Red Edge', output_image)
+        # 결과 표시
+        cv2.imshow('Original Image', cv2.imread(image_path))
+        cv2.imshow('Red Edge Mask', edge_mask)
+        cv2.imshow('Image with Red Edge', output_image)
 
         print(edge_mask.shape)
         
         # edge_mask의 하단 절반만 저장
         h, w, chan = edge_mask.shape # (1381, 966, 3)
-        half_mask = edge_mask[h//2:, :, : ]  # 하단 절반만 복사
+        half_mask = edge_mask[h//2:, :, :]  # 하단 절반만 복사
 
         # 수정된 마스크 저장
         cv2.imwrite('deeplab_red_edge_mask.jpg', half_mask)
