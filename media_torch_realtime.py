@@ -74,7 +74,7 @@ class PoseMatchingSystem:
 
         # 조건 검사
         # 1. 팔꿈치가 충분히 펴져있는지 (165도 이상)
-        arms_straight = (left_arm_angle > 170 and right_arm_angle > 165)
+        arms_straight = (left_arm_angle > 165 and right_arm_angle > 165)
         
         # 2. 팔이 수평에 가까운지 (수평 = 0도 또는 180도)
         left_is_horizontal = (left_horizontal < 20 or left_horizontal > 160)
