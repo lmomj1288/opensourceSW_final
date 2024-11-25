@@ -82,7 +82,7 @@ class DeepLabSegmentation:
         return output_image, colored_edge_mask
 
 def main():
-    image_path = "C:/Users/lmomj/Desktop/opensource/final/movies/bakha.jpg"
+    image_path = "C:/Users/lmomj/Desktop/opensource/final/movies/ripley.jpg"
     
     try:
         segmentation = DeepLabSegmentation()
@@ -97,10 +97,10 @@ def main():
         
         # edge_mask의 하단 절반만 저장
         h, w, chan = edge_mask.shape # (1381, 966, 3)
-        half_mask = edge_mask[h//2:, :, :]  # 하단 절반만 복사
+        # half_mask = edge_mask[h//2:, :, :]  # 하단 절반만 복사
 
         # 수정된 마스크 저장
-        cv2.imwrite('deeplab_red_edge_mask.jpg', half_mask)
+        cv2.imwrite('deeplab_red_edge_mask.jpg', edge_mask)
         
         cv2.waitKey(0)
         cv2.destroyAllWindows()
