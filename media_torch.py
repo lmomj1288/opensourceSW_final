@@ -82,7 +82,7 @@ class DeepLabSegmentation:
         return output_image, colored_edge_mask
 
 def main():
-    image_path = "C:/Users/lmomj/Desktop/opensource/final/movies/ripley.jpg"
+    image_path = "C:/Users/lmomj/Desktop/opensource/final/movies/bakha.jpg"
     
     try:
         segmentation = DeepLabSegmentation()
