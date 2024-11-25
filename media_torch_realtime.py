@@ -69,7 +69,8 @@ class PoseTemplateSystem:
         h, w, _ = edge_mask.shape
         half_mask = edge_mask[h//2:, :, :]
         
-        return half_mask
+        # return half_mask
+        return edge_mask
 
     def run_webcam_overlay(self, template_mask):
         """웹캠에 템플릿 마스크 오버레이"""
@@ -123,8 +124,8 @@ class PoseTemplateSystem:
 
 def main():
     # 이미지 경로 설정
-    # image_path = "C:/Users/lmomj/Desktop/opensource/final/movies/bakha.jpg"
-    image_path = "C:/Users/lmomj/Desktop/opensource/final/movies/ripleypython .jpg"    
+    image_path = "C:/Users/lmomj/Desktop/opensource/final/movies/park.jpg"
+    # image_path = "C:/Users/lmomj/Desktop/opensource/final/movies/ripleypython .jpg"    
     
     try:
         # 시스템 초기화
