@@ -63,7 +63,8 @@ class SelfieSegmentation:
         self.selfie_segmentation.close()
 
 def main():
-    image_path = "C:/Users/lmomj/Desktop/opensource/project/sunflower.jpg"
+    # image_path = "C:/Users/lmomj/Desktop/opensource/project/sunflower.jpg"
+    image_path = "C:/Users/lmomj/Desktop/opensource/final/movies/Jake_Sully.jpg"
     
     try:
         segmentation = SelfieSegmentation()
