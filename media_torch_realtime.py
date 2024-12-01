@@ -1,128 +1,85 @@
-import torch
-import torchvision
-from torchvision import transforms
 import cv2
 import numpy as np
-from PIL import Image
 import mediapipe as mp
+from PIL import Image
 
-class PoseTemplateSystem:
+class PoseMatchingSystem:
     def __init__(self):
-        # DeepLab 모델 초기화
-        self.model = torchvision.models.segmentation.deeplabv3_resnet101(pretrained=True)
-        self.model.eval()
-        if torch.cuda.is_available():
-            self.model = self.model.cuda()
-        
-        self.transform = transforms.Compose([
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], 
-                              std=[0.229, 0.224, 0.225])
-        ])
-
-        # MediaPipe 초기화
         self.mp_pose = mp.solutions.pose
         self.pose = self.mp_pose.Pose(
             static_image_mode=False,
-            model_complexity=1,
+            model_complexity=2,
             min_detection_confidence=0.5,
             min_tracking_confidence=0.5
         )
         self.mp_draw = mp.solutions.drawing_utils
+        self.template_landmarks = None
 
-    def get_edge_mask(self, mask, method='canny', thickness=5):
-        """마스크에서 edge를 추출하는 함수"""
-        if method == 'canny':
-            edges = cv2.Canny(mask.astype(np.uint8) * 255, 100, 200)
-            kernel = np.ones((thickness, thickness), np.uint8)
-            edges = cv2.dilate(edges, kernel, iterations=1)
-            
-            colored_edges = np.zeros((edges.shape[0], edges.shape[1], 3), dtype=np.uint8)
-            colored_edges[edges > 0] = [0, 0, 255]
-            return colored_edges, edges  # edges도 함께 반환
-        
-        elif method == 'contour':
-            contours, _ = cv2.findContours(mask.astype(np.uint8), 
-                                         cv2.RETR_EXTERNAL, 
-                                         cv2.CHAIN_APPROX_SIMPLE)
-            edge_mask = np.zeros((mask.shape[0], mask.shape[1], 3), dtype=np.uint8)
-            binary_edge_mask = np.zeros((mask.shape[0], mask.shape[1]), dtype=np.uint8)
-            cv2.drawContours(edge_mask, contours, -1, (0, 0, 255), thickness)
-            cv2.drawContours(binary_edge_mask, contours, -1, 255, thickness)
-            return edge_mask, binary_edge_mask
-
-    def calculate_pose_match(self, frame, template_mask, template_binary):
-        """포즈 매칭 점수 계산"""
-        # MediaPipe를 사용하여 포즈 감지
-        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        results = self.pose.process(frame_rgb)
+    def extract_pose_landmarks(self, image):
+        """이미지에서 pose landmarks 추출"""
+        image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        results = self.pose.process(image_rgb)
         
         if results.pose_landmarks:
-            # 포즈 랜드마크를 이용해 마스크 생성
-            h, w = frame.shape[:2]
-            pose_mask = np.zeros((h, w), dtype=np.uint8)
-            
-            # 랜드마크 좌표를 이용해 마스크 생성
-            landmarks = results.pose_landmarks.landmark
-            points = []
-            for landmark in landmarks:
-                x, y = int(landmark.x * w), int(landmark.y * h)
-                points.append([x, y])
-            
-            points = np.array(points, dtype=np.int32)
-            hull = cv2.convexHull(points)
-            cv2.fillPoly(pose_mask, [hull], 255)
-            
-            # 템플릿 마스크와 포즈 마스크의 겹치는 영역 계산
-            intersection = cv2.bitwise_and(template_binary, pose_mask)
-            template_area = cv2.countNonZero(template_binary)
-            intersection_area = cv2.countNonZero(intersection)
-            
-            if template_area > 0:
-                match_score = intersection_area / template_area
-                return match_score, pose_mask
+            landmarks = []
+            for landmark in results.pose_landmarks.landmark:
+                landmarks.append([landmark.x, landmark.y, landmark.z])
+            return np.array(landmarks), results.pose_landmarks
+        return None, None
+
+    def calculate_pose_similarity(self, landmarks1, landmarks2):
+        """두 포즈 간의 유사도 계산"""
+        if landmarks1 is None or landmarks2 is None:
+            return 0.0
+
+        # 좌표 정규화
+        landmarks1_norm = landmarks1 - np.mean(landmarks1, axis=0)
+        landmarks2_norm = landmarks2 - np.mean(landmarks2, axis=0)
+
+        # Procrustes 분석을 통한 유사도 계산
+        scale1 = np.sqrt(np.sum(landmarks1_norm ** 2))
+        scale2 = np.sqrt(np.sum(landmarks2_norm ** 2))
         
-        return 0.0, None
+        landmarks1_scaled = landmarks1_norm / scale1
+        landmarks2_scaled = landmarks2_norm / scale2
 
-    def create_template_mask(self, image_path):
-        """이미지로부터 템플릿 마스크 생성"""
-        # 이미지 로드 및 전처리
-        image = Image.open(image_path).convert('RGB')
-        input_tensor = self.transform(image)
-        input_batch = input_tensor.unsqueeze(0)
+        # 유클리드 거리 계산
+        diff = landmarks1_scaled - landmarks2_scaled
+        distance = np.sqrt(np.sum(diff ** 2))
         
-        if torch.cuda.is_available():
-            input_batch = input_batch.cuda()
+        # 거리를 0-1 사이의 유사도 점수로 변환
+        similarity = 1 / (1 + distance)
+        return similarity
 
-        with torch.no_grad():
-            output = self.model(input_batch)['out'][0]
+    def create_template(self, image_path):
+        """템플릿 이미지의 pose landmarks 추출"""
+        template_image = cv2.imread(image_path)
+        if template_image is None:
+            raise ValueError("템플릿 이미지를 불러올 수 없습니다.")
+            
+        # 템플릿 이미지 크기 조정 (웹캠 크기에 맞춤)
+        template_image = cv2.resize(template_image, (640, 480))
+        self.template_landmarks, template_pose_landmarks = self.extract_pose_landmarks(template_image)
+        self.template_image = template_image
         
-        output_predictions = output.argmax(0).cpu().numpy()
-
-        # 마스크 생성 및 후처리
-        mask = np.zeros_like(output_predictions)
-        mask[output_predictions == 15] = 1
-        mask = cv2.medianBlur(mask.astype(np.uint8), 7)
-        kernel = np.ones((5,5), np.uint8)
-        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
-        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
-        mask = cv2.GaussianBlur(mask, (7,7), 0)
-
-        # edge 추출
-        edge_mask, binary_edge_mask = self.get_edge_mask(mask, method='canny', thickness=3)
+        # 템플릿 이미지에 포즈 랜드마크 그리기
+        template_with_pose = template_image.copy()
+        if template_pose_landmarks:
+            self.mp_draw.draw_landmarks(
+                template_with_pose,
+                template_pose_landmarks,
+                self.mp_pose.POSE_CONNECTIONS
+            )
+        self.template_with_pose = template_with_pose
         
-        return edge_mask, binary_edge_mask
+        if self.template_landmarks is None:
+            raise ValueError("템플릿 이미지에서 포즈를 감지할 수 없습니다.")
 
-    def run_webcam_overlay(self, template_mask, template_binary):
-        """웹캠에 템플릿 마스크 오버레이"""
+    def run_webcam_matching(self):
+        """웹캠을 통한 실시간 포즈 매칭"""
         cap = cv2.VideoCapture(0)
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-
-        template_height = int(480 * 0.8)
-        template_width = int(640 * 0.8)
-        template_mask = cv2.resize(template_mask, (640, template_height))
-        template_binary = cv2.resize(template_binary, (640, template_height))
 
         try:
             while True:
@@ -131,61 +88,72 @@ class PoseTemplateSystem:
                     print("웹캠에서 프레임을 읽을 수 없습니다.")
                     break
 
-                frame = cv2.resize(frame, (640, 480))
-                output_image = frame.copy()
-
-                # 중앙 위치 계산
-                start_y = (480 - template_height) // 2
-                end_y = start_y + template_height
-
-                # 포즈 매칭 점수 계산
-                match_score, pose_mask = self.calculate_pose_match(
-                    frame[start_y:end_y, :], 
-                    template_mask,
-                    template_binary
-                )
-
-                # 템플릿 마스크 오버레이
-                mask_area = output_image[start_y:end_y, :]
-                red_mask = template_mask[:, :, 2] > 0
-                mask_area[red_mask] = mask_area[red_mask] * 0.3 + template_mask[red_mask] * 0.7
-
-                # 매칭 점수 표시
-                score_text = f"Match: {match_score:.2%}"
-                cv2.putText(output_image, score_text, 
-                          (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+                # 현재 프레임의 포즈 감지
+                current_landmarks, current_pose_landmarks = self.extract_pose_landmarks(frame)
                 
-                # 95% 이상 매칭되면 1 출력
-                if match_score >= 0.95:
-                    cv2.putText(output_image, "1", 
-                              (320, 240), cv2.FONT_HERSHEY_SIMPLEX, 4, (0, 255, 0), 4)
+                # 결과 이미지 준비 (웹캠과 템플릿 이미지를 나란히 표시)
+                output_image = np.zeros((480, 1280, 3), dtype=np.uint8)
+                
+                # 템플릿 이미지 왼쪽에 표시
+                output_image[:, :640] = self.template_with_pose
+                
+                # 웹캠 이미지 오른쪽에 표시
+                output_image[:, 640:] = frame
+                
+                if current_landmarks is not None and current_pose_landmarks is not None:
+                    # 포즈 유사도 계산
+                    similarity = self.calculate_pose_similarity(
+                        self.template_landmarks, 
+                        current_landmarks
+                    )
+                    
+                    # 웹캠 영상에 포즈 시각화
+                    self.mp_draw.draw_landmarks(
+                        output_image[:, 640:],
+                        current_pose_landmarks,
+                        self.mp_pose.POSE_CONNECTIONS
+                    )
+                    
+                    # 유사도 점수 표시
+                    score_text = f"Similarity: {similarity:.2%}"
+                    cv2.putText(output_image, score_text,
+                              (10, 30), cv2.FONT_HERSHEY_SIMPLEX,
+                              1, (0, 255, 0), 2)
+                    
+                    # 95% 이상 매칭되면 1 출력
+                    if similarity >= 0.95:
+                        cv2.putText(output_image, "1",
+                                  (640 + 320, 240), cv2.FONT_HERSHEY_SIMPLEX,
+                                  4, (0, 255, 0), 4)
 
-                cv2.putText(output_image, "Press 'q' to quit", 
-                          (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+                # 종료 안내 텍스트
+                cv2.putText(output_image, "Press 'q' to quit",
+                          (10, 60), cv2.FONT_HERSHEY_SIMPLEX,
+                          1, (0, 255, 0), 2)
 
-                cv2.imshow('Pose Template Overlay', output_image)
+                # 구분선 그리기
+                cv2.line(output_image, (640, 0), (640, 480), (255, 255, 255), 2)
+
+                cv2.imshow('Pose Matching', output_image)
 
                 if cv2.waitKey(1) & 0xFF == ord('q'):
                     break
 
-        except Exception as e:
-            print(f"에러 발생: {e}")
         finally:
             cap.release()
             cv2.destroyAllWindows()
             self.pose.close()
 
 def main():
-    image_path = "C:/Users/lmomj/Desktop/opensource/final/movies/faker.jpg"
+    image_path = "C:/Users/lmomj/Desktop/opensource/final/movies/bakha.jpg"
     
     try:
-        system = PoseTemplateSystem()
+        system = PoseMatchingSystem()
+        print("템플릿 포즈 추출 중...")
+        system.create_template(image_path)
         
-        print("템플릿 마스크 생성 중...")
-        template_mask, template_binary = system.create_template_mask(image_path)
-        
-        print("웹캠 오버레이 시작...")
-        system.run_webcam_overlay(template_mask, template_binary)
+        print("웹캠 매칭 시작...")
+        system.run_webcam_matching()
 
     except Exception as e:
         print(f"에러 발생: {e}")
