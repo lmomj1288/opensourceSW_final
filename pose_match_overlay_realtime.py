@@ -136,11 +136,26 @@ class PoseMatchingSystem:
             )
         template_with_landmarks = template_with_landmarks.astype(np.float32) / 255.0
 
+        # Complete 상태일 때는 마지막 블렌딩 상태 유지
+        if self.complete_time is not None:
+            if self.blend_alpha > 0 and pose_landmarks:
+                body_mask = self.create_body_mask(pose_landmarks, frame.shape)
+                mask3d = np.stack([body_mask] * 3, axis=2)
+                blended = template_with_landmarks.copy()
+                np.copyto(blended, frame_float, where=(mask3d > 0.2))
+                output = cv2.addWeighted(
+                    template_with_landmarks, 0.1,
+                    blended, 0.9,
+                    0
+                )
+                return (output * 255).astype(np.uint8)
+            return (template_with_landmarks * 255).astype(np.uint8)
+
         if similarity >= 0.80:
             if self.success_start_time is None:
                 self.success_start_time = time.time()
             self.match_duration += 1
-            self.blend_alpha = min(0.8, self.blend_alpha + 0.05)
+            self.blend_alpha = min(0.99, self.blend_alpha + 0.1)
         else:
             self.success_start_time = None
             self.match_duration = 0
@@ -151,11 +166,11 @@ class PoseMatchingSystem:
             mask3d = np.stack([body_mask] * 3, axis=2)
             
             blended = template_with_landmarks.copy()
-            np.copyto(blended, frame_float, where=(mask3d > 0.5))
+            np.copyto(blended, frame_float, where=(mask3d > 0.2))
             
             output = cv2.addWeighted(
-                template_with_landmarks, 1 - self.blend_alpha,
-                blended, self.blend_alpha,
+                template_with_landmarks, 0.1,
+                blended, 0.9,
                 0
             )
 
@@ -163,10 +178,10 @@ class PoseMatchingSystem:
                 glow = np.zeros_like(frame_float)
                 h, w = frame.shape[:2]
                 cv2.circle(glow, (w//2, h//2), 
-                          int(min(w,h) * 0.4), 
-                          (0.5, 1.0, 0.5), -1)
+                        int(min(w,h) * 0.4), 
+                        (0.5, 1.0, 0.5), -1)
                 glow = cv2.GaussianBlur(glow, (21, 21), 0)
-                output = cv2.addWeighted(output, 1.0, glow, 0.3, 0)
+                output = cv2.addWeighted(output, 1.0, glow, 0.2, 0)
 
             return (output * 255).astype(np.uint8)
         
