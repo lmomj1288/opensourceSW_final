@@ -14,8 +14,9 @@ class PoseMatchingSystem:
         )
         self.mp_draw = mp.solutions.drawing_utils
         self.template_landmarks = None
+        self.template_pose_landmarks = None  # 템플릿 포즈 랜드마크 저장
         self.match_duration = 0
-        self.blend_alpha = 0.0  # 블렌딩 강도를 위한 변수
+        self.blend_alpha = 0.0
 
     def extract_pose_landmarks(self, image):
         """이미지에서 pose landmarks 추출"""
@@ -71,7 +72,7 @@ class PoseMatchingSystem:
             raise ValueError("템플릿 이미지를 불러올 수 없습니다.")
             
         template_image = cv2.resize(template_image, (640, 480))
-        self.template_landmarks, template_pose_landmarks = self.extract_pose_landmarks(template_image)
+        self.template_landmarks, self.template_pose_landmarks = self.extract_pose_landmarks(template_image)
         self.template_image = template_image
         
         if self.template_landmarks is None:
@@ -79,33 +80,37 @@ class PoseMatchingSystem:
 
     def apply_blending_effect(self, frame, template_image, similarity, pose_landmarks):
         """블렌딩 효과 적용"""
-        if similarity >= 0.80:  # 임계값을 0.80(80%)로 설정
+        # 템플릿 이미지에 포즈 랜드마크 그리기
+        template_with_landmarks = template_image.copy()
+        if self.template_pose_landmarks:
+            self.mp_draw.draw_landmarks(
+                template_with_landmarks,
+                self.template_pose_landmarks,
+                self.mp_pose.POSE_CONNECTIONS,
+                self.mp_draw.DrawingSpec(color=(0, 255, 0), thickness=2, circle_radius=2)
+            )
+
+        if similarity >= 0.80:
             self.match_duration += 1
-            # 블렌딩 강도를 부드럽게 증가
             self.blend_alpha = min(0.8, self.blend_alpha + 0.05)
         else:
             self.match_duration = 0
-            # 블렌딩 강도를 부드럽게 감소
             self.blend_alpha = max(0.0, self.blend_alpha - 0.05)
 
         if self.blend_alpha > 0 and pose_landmarks:
-            # 신체 마스크 생성
             body_mask = self.create_body_mask(pose_landmarks, frame.shape)
             mask3d = np.stack([body_mask] * 3, axis=2)
             
-            # 블렌딩 적용
-            blended = template_image.copy()
+            blended = template_with_landmarks.copy()
             np.copyto(blended, frame, where=(mask3d > 0.5))
             
-            # 최종 이미지 생성
             output = cv2.addWeighted(
-                template_image, 1 - self.blend_alpha,
+                template_with_landmarks, 1 - self.blend_alpha,
                 blended, self.blend_alpha,
                 0
             )
 
             if self.match_duration > 30:
-                # 성공 효과
                 h, w = frame.shape[:2]
                 glow = np.zeros_like(frame, dtype=np.float32)
                 cv2.circle(glow, (w//2, h//2), 
@@ -116,7 +121,7 @@ class PoseMatchingSystem:
 
             return output
         
-        return template_image.copy()
+        return template_with_landmarks
 
     def run_webcam_matching(self):
         """웹캠을 통한 실시간 포즈 매칭"""
@@ -147,7 +152,16 @@ class PoseMatchingSystem:
                     output_image[:, :640] = blended_template
                     
                 else:
-                    output_image[:, :640] = self.template_image
+                    # 템플릿 이미지에 포즈 랜드마크 그리기
+                    template_with_landmarks = self.template_image.copy()
+                    if self.template_pose_landmarks:
+                        self.mp_draw.draw_landmarks(
+                            template_with_landmarks,
+                            self.template_pose_landmarks,
+                            self.mp_pose.POSE_CONNECTIONS,
+                            self.mp_draw.DrawingSpec(color=(0, 255, 0), thickness=2, circle_radius=2)
+                        )
+                    output_image[:, :640] = template_with_landmarks
 
                 # 웹캠 영상 표시
                 output_image[:, 640:] = frame
@@ -196,7 +210,7 @@ class PoseMatchingSystem:
             self.pose.close()
 
 def main():
-    image_path = "C:/Users/lmomj/Desktop/opensource/final/movies/bakha.jpg"
+    image_path = "C:/Users/lmomj/Desktop/opensource/final/movies/son.jpg"
     
     try:
         system = PoseMatchingSystem()
