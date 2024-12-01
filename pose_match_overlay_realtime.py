@@ -35,9 +35,45 @@ class PoseMatchingSystem:
         return None, None
 
     def calculate_pose_similarity(self, landmarks1, landmarks2):
+        """두 포즈 간의 유사도 계산 (포즈 + 위치 + 크기)"""
         if landmarks1 is None or landmarks2 is None:
             return 0.0
 
+        # 1. 바운딩 박스 계산
+        def get_pose_bounds(landmarks):
+            x_coords = landmarks[:, 0]
+            y_coords = landmarks[:, 1]
+            left = np.min(x_coords)
+            right = np.max(x_coords)
+            top = np.min(y_coords)
+            bottom = np.max(y_coords)
+            return left, right, top, bottom
+
+        # 템플릿과 현재 포즈의 바운딩 박스 계산
+        t_left, t_right, t_top, t_bottom = get_pose_bounds(landmarks1)
+        c_left, c_right, c_top, c_bottom = get_pose_bounds(landmarks2)
+
+        # 2. 크기 유사도 계산
+        template_width = t_right - t_left
+        template_height = t_bottom - t_top
+        current_width = c_right - c_left
+        current_height = c_bottom - c_top
+        
+        size_ratio_w = min(template_width, current_width) / max(template_width, current_width)
+        size_ratio_h = min(template_height, current_height) / max(template_height, current_height)
+        size_similarity = (size_ratio_w + size_ratio_h) / 2
+
+        # 3. 위치 유사도 계산 (중심점 기준)
+        template_center_x = (t_left + t_right) / 2
+        template_center_y = (t_top + t_bottom) / 2
+        current_center_x = (c_left + c_right) / 2
+        current_center_y = (c_top + c_bottom) / 2
+
+        position_diff_x = abs(template_center_x - current_center_x)
+        position_diff_y = abs(template_center_y - current_center_y)
+        position_similarity = 1 / (1 + position_diff_x + position_diff_y)
+
+        # 4. 포즈 형태 유사도 계산 (기존 방식)
         landmarks1_norm = landmarks1 - np.mean(landmarks1, axis=0)
         landmarks2_norm = landmarks2 - np.mean(landmarks2, axis=0)
 
@@ -47,12 +83,19 @@ class PoseMatchingSystem:
         landmarks1_scaled = landmarks1_norm / scale1
         landmarks2_scaled = landmarks2_norm / scale2
 
-        diff = landmarks1_scaled - landmarks2_scaled
-        distance = np.sqrt(np.sum(diff ** 2))
-        
-        similarity = 1 / (1 + distance)
-        return similarity
+        pose_diff = landmarks1_scaled - landmarks2_scaled
+        pose_distance = np.sqrt(np.sum(pose_diff ** 2))
+        pose_similarity = 1 / (1 + pose_distance)
 
+        # 5. 최종 유사도 계산 (가중치 조정 가능)
+        total_similarity = (
+            0.4 * pose_similarity +     # 포즈 형태
+            0.3 * position_similarity + # 위치
+            0.3 * size_similarity      # 크기
+        )
+
+        return total_similarity
+    
     def create_body_mask(self, landmarks, image_shape):
         mask = np.zeros(image_shape[:2], dtype=np.uint8)
         points = []
@@ -93,7 +136,7 @@ class PoseMatchingSystem:
             )
         template_with_landmarks = template_with_landmarks.astype(np.float32) / 255.0
 
-        if similarity >= 0.75:
+        if similarity >= 0.80:
             if self.success_start_time is None:
                 self.success_start_time = time.time()
             self.match_duration += 1
@@ -219,7 +262,7 @@ class PoseMatchingSystem:
             self.pose.close()
 
 def main():
-    image_path = "C:/Users/lmomj/Desktop/opensource/final/movies/bakha.jpg"
+    image_path = "C:/Users/lmomj/Desktop/opensource/final/movies/son.jpg"
     
     try:
         system = PoseMatchingSystem()
