@@ -2,6 +2,7 @@ import cv2
 import numpy as np
 import mediapipe as mp
 from PIL import Image
+import time
 
 class PoseMatchingSystem:
     def __init__(self):
@@ -14,12 +15,15 @@ class PoseMatchingSystem:
         )
         self.mp_draw = mp.solutions.drawing_utils
         self.template_landmarks = None
-        self.template_pose_landmarks = None  # 템플릿 포즈 랜드마크 저장
+        self.template_pose_landmarks = None
         self.match_duration = 0
         self.blend_alpha = 0.0
+        self.similarity = 0.0
+        self.success_start_time = None
+        self.success_duration = 3.0    # 3초 유지
+        self.complete_time = None
 
     def extract_pose_landmarks(self, image):
-        """이미지에서 pose landmarks 추출"""
         image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         results = self.pose.process(image_rgb)
         
@@ -31,7 +35,6 @@ class PoseMatchingSystem:
         return None, None
 
     def calculate_pose_similarity(self, landmarks1, landmarks2):
-        """두 포즈 간의 유사도 계산"""
         if landmarks1 is None or landmarks2 is None:
             return 0.0
 
@@ -51,7 +54,6 @@ class PoseMatchingSystem:
         return similarity
 
     def create_body_mask(self, landmarks, image_shape):
-        """랜드마크를 기반으로 신체 마스크 생성"""
         mask = np.zeros(image_shape[:2], dtype=np.uint8)
         points = []
         for landmark in landmarks.landmark:
@@ -66,22 +68,22 @@ class PoseMatchingSystem:
         return mask / 255.0
 
     def create_template(self, image_path):
-        """템플릿 이미지의 pose landmarks 추출"""
         template_image = cv2.imread(image_path)
         if template_image is None:
             raise ValueError("템플릿 이미지를 불러올 수 없습니다.")
             
         template_image = cv2.resize(template_image, (640, 480))
         self.template_landmarks, self.template_pose_landmarks = self.extract_pose_landmarks(template_image)
-        self.template_image = template_image
+        self.template_image = template_image.astype(np.float32) / 255.0
         
         if self.template_landmarks is None:
             raise ValueError("템플릿 이미지에서 포즈를 감지할 수 없습니다.")
 
-    def apply_blending_effect(self, frame, template_image, similarity, pose_landmarks):
-        """블렌딩 효과 적용"""
-        # 템플릿 이미지에 포즈 랜드마크 그리기
-        template_with_landmarks = template_image.copy()
+    def apply_blending_effect(self, frame, similarity, pose_landmarks):
+        frame_float = frame.astype(np.float32) / 255.0
+        template_with_landmarks = self.template_image.copy()
+
+        template_with_landmarks = (template_with_landmarks * 255).astype(np.uint8)
         if self.template_pose_landmarks:
             self.mp_draw.draw_landmarks(
                 template_with_landmarks,
@@ -89,11 +91,15 @@ class PoseMatchingSystem:
                 self.mp_pose.POSE_CONNECTIONS,
                 self.mp_draw.DrawingSpec(color=(0, 255, 0), thickness=2, circle_radius=2)
             )
+        template_with_landmarks = template_with_landmarks.astype(np.float32) / 255.0
 
-        if similarity >= 0.80:
+        if similarity >= 0.75:
+            if self.success_start_time is None:
+                self.success_start_time = time.time()
             self.match_duration += 1
             self.blend_alpha = min(0.8, self.blend_alpha + 0.05)
         else:
+            self.success_start_time = None
             self.match_duration = 0
             self.blend_alpha = max(0.0, self.blend_alpha - 0.05)
 
@@ -102,7 +108,7 @@ class PoseMatchingSystem:
             mask3d = np.stack([body_mask] * 3, axis=2)
             
             blended = template_with_landmarks.copy()
-            np.copyto(blended, frame, where=(mask3d > 0.5))
+            np.copyto(blended, frame_float, where=(mask3d > 0.5))
             
             output = cv2.addWeighted(
                 template_with_landmarks, 1 - self.blend_alpha,
@@ -111,20 +117,19 @@ class PoseMatchingSystem:
             )
 
             if self.match_duration > 30:
+                glow = np.zeros_like(frame_float)
                 h, w = frame.shape[:2]
-                glow = np.zeros_like(frame, dtype=np.float32)
                 cv2.circle(glow, (w//2, h//2), 
                           int(min(w,h) * 0.4), 
                           (0.5, 1.0, 0.5), -1)
                 glow = cv2.GaussianBlur(glow, (21, 21), 0)
                 output = cv2.addWeighted(output, 1.0, glow, 0.3, 0)
 
-            return output
+            return (output * 255).astype(np.uint8)
         
-        return template_with_landmarks
+        return (template_with_landmarks * 255).astype(np.uint8)
 
     def run_webcam_matching(self):
-        """웹캠을 통한 실시간 포즈 매칭"""
         cap = cv2.VideoCapture(0)
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
@@ -140,33 +145,24 @@ class PoseMatchingSystem:
                 output_image = np.zeros((480, 1280, 3), dtype=np.uint8)
 
                 if current_landmarks is not None and current_pose_landmarks is not None:
-                    similarity = self.calculate_pose_similarity(
+                    self.similarity = self.calculate_pose_similarity(
                         self.template_landmarks, 
                         current_landmarks
                     )
 
-                    # 블렌딩 효과 적용
                     blended_template = self.apply_blending_effect(
-                        frame, self.template_image, similarity, current_pose_landmarks
+                        frame, self.similarity, current_pose_landmarks
                     )
                     output_image[:, :640] = blended_template
                     
                 else:
-                    # 템플릿 이미지에 포즈 랜드마크 그리기
-                    template_with_landmarks = self.template_image.copy()
-                    if self.template_pose_landmarks:
-                        self.mp_draw.draw_landmarks(
-                            template_with_landmarks,
-                            self.template_pose_landmarks,
-                            self.mp_pose.POSE_CONNECTIONS,
-                            self.mp_draw.DrawingSpec(color=(0, 255, 0), thickness=2, circle_radius=2)
-                        )
+                    template_with_landmarks = self.apply_blending_effect(
+                        frame, 0.0, None
+                    )
                     output_image[:, :640] = template_with_landmarks
 
-                # 웹캠 영상 표시
                 output_image[:, 640:] = frame
 
-                # 포즈 랜드마크 시각화
                 if current_pose_landmarks:
                     self.mp_draw.draw_landmarks(
                         output_image[:, 640:],
@@ -175,19 +171,33 @@ class PoseMatchingSystem:
                         self.mp_draw.DrawingSpec(color=(0, 255, 0), thickness=2, circle_radius=2)
                     )
 
-                # 유사도 점수 표시
-                if current_landmarks is not None:
-                    score_text = f"Similarity: {similarity:.2%}"
-                    cv2.putText(output_image, score_text,
-                              (10, 30), cv2.FONT_HERSHEY_SIMPLEX,
-                              1, (0, 255, 0), 2)
+                score_text = f"Similarity: {self.similarity:.2%}"
+                cv2.putText(output_image, score_text,
+                          (10, 30), cv2.FONT_HERSHEY_SIMPLEX,
+                          1, (0, 255, 0), 2)
 
-                    if similarity >= 0.80:
-                        cv2.putText(output_image, "MATCH!",
+                if self.success_start_time is not None:
+                    elapsed_time = time.time() - self.success_start_time
+                    if elapsed_time >= self.success_duration:
+                        if self.complete_time is None:
+                            self.complete_time = time.time()
+                        
+                        # Complete 메시지 표시
+                        cv2.putText(output_image, "Complete!",
+                                  (int(1280/2 - 150), int(480/2)),
+                                  cv2.FONT_HERSHEY_SIMPLEX,
+                                  2, (0, 255, 0), 3)
+                        
+                        # Complete 표시 1초 후 종료
+                        if time.time() - self.complete_time >= 1.0:
+                            break
+                    else:
+                        # 남은 시간 표시
+                        remaining = self.success_duration - elapsed_time
+                        cv2.putText(output_image, f"Hold for {remaining:.1f}s",
                                   (640 + 200, 50), cv2.FONT_HERSHEY_SIMPLEX,
                                   1.5, (0, 255, 0), 3)
 
-                # 설명 텍스트 추가
                 cv2.putText(output_image, "Template Pose", (10, 450), 
                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
                 cv2.putText(output_image, "Your Pose", (650, 450), 
@@ -196,7 +206,6 @@ class PoseMatchingSystem:
                           (10, 60), cv2.FONT_HERSHEY_SIMPLEX,
                           1, (0, 255, 0), 2)
 
-                # 구분선 그리기
                 cv2.line(output_image, (640, 0), (640, 480), (255, 255, 255), 2)
 
                 cv2.imshow('Pose Matching', output_image)
@@ -210,7 +219,7 @@ class PoseMatchingSystem:
             self.pose.close()
 
 def main():
-    image_path = "C:/Users/lmomj/Desktop/opensource/final/movies/son.jpg"
+    image_path = "C:/Users/lmomj/Desktop/opensource/final/movies/bakha.jpg"
     
     try:
         system = PoseMatchingSystem()
