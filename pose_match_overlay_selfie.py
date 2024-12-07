@@ -197,7 +197,9 @@ class PoseMatchingSystem:
                 if not ret:
                     print("웹캠에서 프레임을 읽을 수 없습니다.")
                     break
-
+                
+                frame = cv2.flip(frame, 1)
+                
                 current_landmarks, current_pose_landmarks = self.extract_pose_landmarks(frame)
                 output_image = np.zeros((480, 1280, 3), dtype=np.uint8)
 
@@ -274,7 +276,7 @@ class PoseMatchingSystem:
             self.selfie_seg.close()
 
 def main():
-    image_path = "C:/Users/lmomj/Desktop/opensource/final/movies/son.jpg"
+    image_path = "C:/Users/lmomj/Desktop/opensource/final/movies/ronaldo.jpg"
     
     try:
         system = PoseMatchingSystem()
