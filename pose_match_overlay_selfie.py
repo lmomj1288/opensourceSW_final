@@ -149,7 +149,7 @@ class PoseMatchingSystem:
                     return (output * 255).astype(np.uint8)
             return (template_with_landmarks * 255).astype(np.uint8)
 
-        if similarity >= 0.80:
+        if similarity >= 0.85:
             if self.success_start_time is None:
                 self.success_start_time = time.time()
             self.match_duration += 1
@@ -276,7 +276,7 @@ class PoseMatchingSystem:
             self.selfie_seg.close()
 
 def main():
-    image_path = "C:/Users/lmomj/Desktop/opensource/final/movies/ronaldo.jpg"
+    image_path = "C:/Users/lmomj/Desktop/opensource/final/movies/park.jpg"
     
     try:
         system = PoseMatchingSystem()
