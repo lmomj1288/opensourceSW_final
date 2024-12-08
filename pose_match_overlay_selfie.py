@@ -186,67 +186,6 @@ class PoseMatchingSystem:
         
         return (template_with_landmarks * 255).astype(np.uint8)
 
-    def get_pose_bounds(self, landmarks):
-        x_coords = landmarks[:, 0]
-        y_coords = landmarks[:, 1]
-        left = np.min(x_coords)
-        right = np.max(x_coords)
-        top = np.min(y_coords)
-        bottom = np.max(y_coords)
-        
-        return left, right, top, bottom 
-    
-    def align_pose(self, frame, body_mask, current_landmarks):
-        if current_landmarks is None or self.template_landmarks is None:
-            return frame, body_mask
-
-        # Get bounds for template and current pose
-        t_left, t_right, t_top, t_bottom = self.get_pose_bounds(self.template_landmarks)
-        c_left, c_right, c_top, c_bottom = self.get_pose_bounds(current_landmarks)
-
-        # Calculate scaling factors
-        template_width = t_right - t_left
-        template_height = t_bottom - t_top
-        current_width = c_right - c_left
-        current_height = c_bottom - c_top
-
-        scale_x = template_width / current_width
-        scale_y = template_height / current_height
-        scale = min(scale_x, scale_y)  # Use minimum scale to preserve aspect ratio
-
-        # Calculate translation
-        template_center_x = (t_left + t_right) / 2
-        template_center_y = (t_top + t_bottom) / 2
-        current_center_x = (c_left + c_right) / 2
-        current_center_y = (c_top + c_bottom) / 2
-
-        # Create transformation matrix
-        h, w = frame.shape[:2]
-        
-        # Create transformation matrices
-        M_scale = np.float32([
-            [scale, 0, 0],
-            [0, scale, 0]
-        ])
-        
-        dx = (template_center_x - current_center_x) * w
-        dy = (template_center_y - current_center_y) * h
-        M_translate = np.float32([
-            [1, 0, dx],
-            [0, 1, dy]
-        ])
-
-        # Apply transformations
-        frame_aligned = cv2.warpAffine(frame, M_scale, (w, h))
-        frame_aligned = cv2.warpAffine(frame_aligned, M_translate, (w, h))
-        
-        if body_mask is not None:
-            mask_aligned = cv2.warpAffine(body_mask, M_scale, (w, h))
-            mask_aligned = cv2.warpAffine(mask_aligned, M_translate, (w, h))
-            return frame_aligned, mask_aligned
-            
-        return frame_aligned, None
-        
     def run_webcam_matching(self):
         cap = cv2.VideoCapture(0)
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
