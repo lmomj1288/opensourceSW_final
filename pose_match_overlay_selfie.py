@@ -2,7 +2,9 @@ import cv2
 import numpy as np
 import mediapipe as mp
 from PIL import Image
+import pyttsx3 
 import time
+
 
 class PoseMatchingSystem:
     def __init__(self):
@@ -26,6 +28,10 @@ class PoseMatchingSystem:
         self.success_start_time = None
         self.success_duration = 3.0    # 3초 유지
         self.complete_time = None
+        self.engine = pyttsx3.init()
+        self.engine.setProperty('rate', 200)
+        self.engine.setProperty('volume', 0.9)
+        self.completion_announced = False 
 
     def load_templates(self, image_paths):
         for path in image_paths:
@@ -49,6 +55,7 @@ class PoseMatchingSystem:
         self.similarity = 0.0
         self.success_start_time = None 
         self.complete_time = None 
+        self.completion_announced = False 
         
     def next_template(self):
         self.current_index += 1
@@ -273,6 +280,11 @@ class PoseMatchingSystem:
                     if elapsed_time >= self.success_duration:
                         if self.complete_time is None:
                             self.complete_time = time.time()
+                            
+                            if not self.completion_announced:
+                                self.engine.say("Complete")
+                                self.engine.runAndWait()
+                                self.completion_announced = True 
                         
                         cv2.putText(output_image, "Complete!",
                                 (int(1280/2 - 150), int(480/2)),
