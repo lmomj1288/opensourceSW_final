@@ -276,7 +276,7 @@ class PoseMatchingSystem:
             self.selfie_seg.close()
 
 def main():
-    image_path = "C:/Users/lmomj/Desktop/opensource/final/movies/park.jpg"
+    image_path = "C:/Users/lmomj/Desktop/opensource/final/movies/son.jpg"
     
     try:
         system = PoseMatchingSystem()
