@@ -16,8 +16,10 @@ class PoseMatchingSystem:
         )
         self.selfie_seg = self.mp_selfie_segmentation.SelfieSegmentation(model_selection=1)
         self.mp_draw = mp.solutions.drawing_utils
-        self.template_landmarks = None
-        self.template_pose_landmarks = None
+        self.current_index = 0
+        self.template_images = []
+        self.template_landmarks = []
+        self.template_pose_landmarks = []
         self.match_duration = 0
         self.blend_alpha = 0.0
         self.similarity = 0.0
@@ -25,6 +27,34 @@ class PoseMatchingSystem:
         self.success_duration = 3.0    # 3초 유지
         self.complete_time = None
 
+    def load_templates(self, image_paths):
+        for path in image_paths:
+            template_image = cv2.imread(path)
+            if template_image is None:
+                raise ValueError(f"템플릿 이미지를 불러올 수 없습니다: {path}")
+            
+            template_image = cv2.resize(template_image, (640, 480))
+            landmarks, pose_landmarks = self.extract_pose_landmarks(template_image)
+            
+            if landmarks is None:
+                raise ValueError(f"템플릿 이미지에서 포즈를 감지할 수 없습니다: {path}")
+            
+            self.template_images.append(template_image.astype(np.float32) / 255.0)
+            self.template_landmarks.append(landmarks)
+            self.template_pose_landmarks.append(pose_landmarks)
+            
+    def reset_state(self):
+        self.match_duration = 0
+        self.blend_alpha = 0.0
+        self.similarity = 0.0
+        self.success_start_time = None 
+        self.complete_time = None 
+        
+    def next_template(self):
+        self.current_index += 1
+        self.reset_state()
+        return self.current_index < len(self.template_images)
+    
     def extract_pose_landmarks(self, image):
         image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         results = self.pose.process(image_rgb)
@@ -122,13 +152,13 @@ class PoseMatchingSystem:
 
     def apply_blending_effect(self, frame, similarity, pose_landmarks):
         frame_float = frame.astype(np.float32) / 255.0
-        template_with_landmarks = self.template_image.copy()
+        template_with_landmarks = self.template_images[self.current_index].copy()
 
         template_with_landmarks = (template_with_landmarks * 255).astype(np.uint8)
-        if self.template_pose_landmarks:
+        if self.template_pose_landmarks[self.current_index]:
             self.mp_draw.draw_landmarks(
                 template_with_landmarks,
-                self.template_pose_landmarks,
+                self.template_pose_landmarks[self.current_index],
                 self.mp_pose.POSE_CONNECTIONS,
                 self.mp_draw.DrawingSpec(color=(0, 255, 0), thickness=2, circle_radius=2)
             )
@@ -163,10 +193,8 @@ class PoseMatchingSystem:
             body_mask = self.create_body_mask(frame)
             if body_mask is not None:
                 mask3d = np.stack([body_mask] * 3, axis=2)
-                
                 blended = template_with_landmarks.copy()
                 np.copyto(blended, frame_float, where=(mask3d > 0.1))
-                
                 output = cv2.addWeighted(
                     template_with_landmarks, 0.1,
                     blended, 0.9,
@@ -205,7 +233,7 @@ class PoseMatchingSystem:
 
                 if current_landmarks is not None and current_pose_landmarks is not None:
                     self.similarity = self.calculate_pose_similarity(
-                        self.template_landmarks, 
+                        self.template_landmarks[self.current_index], 
                         current_landmarks
                     )
 
@@ -230,10 +258,15 @@ class PoseMatchingSystem:
                         self.mp_draw.DrawingSpec(color=(0, 255, 0), thickness=2, circle_radius=2)
                     )
 
+                # 현재 포즈 번호 표시
+                cv2.putText(output_image, f"Pose {self.current_index + 1}/{len(self.template_images)}",
+                        (10, 90), cv2.FONT_HERSHEY_SIMPLEX,
+                        1, (0, 255, 0), 2)
+
                 score_text = f"Similarity: {self.similarity:.2%}"
                 cv2.putText(output_image, score_text,
-                          (10, 30), cv2.FONT_HERSHEY_SIMPLEX,
-                          1, (0, 255, 0), 2)
+                        (10, 30), cv2.FONT_HERSHEY_SIMPLEX,
+                        1, (0, 255, 0), 2)
 
                 if self.success_start_time is not None:
                     elapsed_time = time.time() - self.success_start_time
@@ -242,25 +275,32 @@ class PoseMatchingSystem:
                             self.complete_time = time.time()
                         
                         cv2.putText(output_image, "Complete!",
-                                  (int(1280/2 - 150), int(480/2)),
-                                  cv2.FONT_HERSHEY_SIMPLEX,
-                                  2, (0, 255, 0), 3)
+                                (int(1280/2 - 150), int(480/2)),
+                                cv2.FONT_HERSHEY_SIMPLEX,
+                                2, (0, 255, 0), 3)
                         
                         if time.time() - self.complete_time >= 1.0:
-                            break
+                            if not self.next_template():
+                                cv2.putText(output_image, "All poses completed!",
+                                        (int(1280/2 - 200), int(480/2) + 50),
+                                        cv2.FONT_HERSHEY_SIMPLEX,
+                                        1.5, (0, 255, 0), 3)
+                                cv2.imshow('Pose Matching', output_image)
+                                cv2.waitKey(2000)  # 2초 대기 후 종료
+                                break
                     else:
                         remaining = self.success_duration - elapsed_time
                         cv2.putText(output_image, f"Hold for {remaining:.1f}s",
-                                  (640 + 200, 50), cv2.FONT_HERSHEY_SIMPLEX,
-                                  1.5, (0, 255, 0), 3)
+                                (640 + 200, 50), cv2.FONT_HERSHEY_SIMPLEX,
+                                1.5, (0, 255, 0), 3)
 
                 cv2.putText(output_image, "Template Pose", (10, 450), 
-                          cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
                 cv2.putText(output_image, "Your Pose", (650, 450), 
-                          cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
                 cv2.putText(output_image, "Press 'q' to quit",
-                          (10, 60), cv2.FONT_HERSHEY_SIMPLEX,
-                          1, (0, 255, 0), 2)
+                        (10, 60), cv2.FONT_HERSHEY_SIMPLEX,
+                        1, (0, 255, 0), 2)
 
                 cv2.line(output_image, (640, 0), (640, 480), (255, 255, 255), 2)
 
@@ -274,14 +314,17 @@ class PoseMatchingSystem:
             cv2.destroyAllWindows()
             self.pose.close()
             self.selfie_seg.close()
-
+            
 def main():
-    image_path = "C:/Users/lmomj/Desktop/opensource/final/movies/son.jpg"
+    image_path = ["C:/Users/lmomj/Desktop/opensource/final/movies/dybala.jpg",
+                  "C:/Users/lmomj/Desktop/opensource/final/movies/son.jpg",
+                  "C:/Users/lmomj/Desktop/opensource/final/movies/yan.jpg"
+                  ]
     
     try:
         system = PoseMatchingSystem()
         print("템플릿 포즈 추출 중...")
-        system.create_template(image_path)
+        system.load_templates(image_path)
         
         print("웹캠 매칭 시작...")
         system.run_webcam_matching()
