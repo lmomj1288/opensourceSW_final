@@ -95,7 +95,7 @@ class GameSelection:
         self.screen.fill(self.BLACK)
         
         # 완료 메시지
-        complete_text = self.font.render("All Poses Completed!", True, self.GREEN)
+        complete_text = self.font.render("Game Over", True, self.GREEN)
         complete_rect = complete_text.get_rect(center=(self.screen_width//2, self.screen_height//3))
         self.screen.blit(complete_text, complete_rect)
         
