@@ -5,7 +5,6 @@ from PIL import Image
 import pyttsx3 
 import time
 
-
 class PoseMatchingSystem:
     def __init__(self):
         self.mp_pose = mp.solutions.pose
