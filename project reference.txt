@@ -1,2 +1,24 @@
-1. selfie_segmentation.py
-2. Deeplabv
+사용한 opensource : Mediapipe, opencv, pygame, PIL, numpy 
+
+[MediaPipe 관련]
+
+MediaPipe 공식 GitHub: https://github.com/google/mediapipe
+MediaPipe Pose 예제: https://github.com/google/mediapipe/blob/master/docs/solutions/pose.md
+MediaPipe Python Solutions: https://github.com/google/mediapipe/tree/master/mediapipe/python
+
+[포즈 추정 관련 프로젝트]
+
+https://github.com/Daniil-Osokin/lightweight-human-pose-estimation.pytorch
+https://github.com/tensorflow/tfjs-models/tree/master/posenet
+
+[실시간 포즈 매칭]
+https://github.com/yemount/pose-animator
+
+[이미지 처리 및 컴퓨터비전]
+https://github.com/opencv/opencv/tree/master/samples/python
+https://github.com/opencv/opencv_contrib/tree/master/modules/pose
+
+[pygame 관련]
+GitHub: https://github.com/pygame/pygame
+ https://github.com/pygame/pygame/tree/main/examples
+
