@@ -307,8 +307,8 @@ class PoseMatchingSystem:
                                     cv2.waitKey(2000)  # 2초 대기 후 종료
                                     break
                     else:
-                        remaining = self.success_duration - elapsed_time
-                        cv2.putText(output_image, f"Hold for {remaining:.1f}s",
+                        remaining = int(self.success_duration - elapsed_time) + 1
+                        cv2.putText(output_image, f"Hold for {remaining}s",
                                 (640 + 200, 50), cv2.FONT_HERSHEY_SIMPLEX,
                                 1.5, (0, 255, 0), 3)
 
