@@ -31,6 +31,8 @@ class PoseMatchingSystem:
         self.engine.setProperty('rate', 200)
         self.engine.setProperty('volume', 0.9)
         self.completion_announced = False 
+        self.display_complete_duration = 2.0
+        self.waiting_for_next = False 
 
     def load_templates(self, image_paths):
         for path in image_paths:
@@ -279,26 +281,31 @@ class PoseMatchingSystem:
                     if elapsed_time >= self.success_duration:
                         if self.complete_time is None:
                             self.complete_time = time.time()
-                            
                             if not self.completion_announced:
                                 self.engine.say("Complete")
                                 self.engine.runAndWait()
-                                self.completion_announced = True 
+                                self.completion_announced = True
+                                self.waiting_for_next = True
                         
+                        # Complete 메시지 표시
                         cv2.putText(output_image, "Complete!",
                                 (int(1280/2 - 150), int(480/2)),
                                 cv2.FONT_HERSHEY_SIMPLEX,
                                 2, (0, 255, 0), 3)
                         
-                        if time.time() - self.complete_time >= 1.0:
-                            if not self.next_template():
-                                cv2.putText(output_image, "All poses completed!",
-                                        (int(1280/2 - 200), int(480/2) + 50),
-                                        cv2.FONT_HERSHEY_SIMPLEX,
-                                        1.5, (0, 255, 0), 3)
-                                cv2.imshow('Pose Matching', output_image)
-                                cv2.waitKey(2000)  # 2초 대기 후 종료
-                                break
+                        # Complete 메시지를 일정 시간 동안 표시
+                        if self.waiting_for_next:
+                            complete_elapsed = time.time() - self.complete_time
+                            if complete_elapsed >= self.display_complete_duration:
+                                self.waiting_for_next = False
+                                if not self.next_template():
+                                    cv2.putText(output_image, "All poses completed!",
+                                            (int(1280/2 - 200), int(480/2) + 50),
+                                            cv2.FONT_HERSHEY_SIMPLEX,
+                                            1.5, (0, 255, 0), 3)
+                                    cv2.imshow('Pose Matching', output_image)
+                                    cv2.waitKey(2000)  # 2초 대기 후 종료
+                                    break
                     else:
                         remaining = self.success_duration - elapsed_time
                         cv2.putText(output_image, f"Hold for {remaining:.1f}s",
