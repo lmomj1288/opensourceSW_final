@@ -1,4 +1,4 @@
-사용한 opensource : Mediapipe, opencv, pygame, PIL, numpy 
+사용한 opensource : Mediapipe, opencv, pygame, PIL, numpy, pyttsx3 
 
 [MediaPipe 관련]
 
@@ -21,4 +21,6 @@ https://github.com/opencv/opencv_contrib/tree/master/modules/pose
 [pygame 관련]
 GitHub: https://github.com/pygame/pygame
  https://github.com/pygame/pygame/tree/main/examples
+
+[
 
