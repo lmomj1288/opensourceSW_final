@@ -227,6 +227,9 @@ class PoseMatchingSystem:
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
+        pose_start_time = time.time()
+        time_limit = 10 
+        
         try:
             while True:
                 ret, frame = cap.read()
@@ -235,6 +238,9 @@ class PoseMatchingSystem:
                     break
                 
                 frame = cv2.flip(frame, 1)
+                current_time = time.time()
+                elapsed_time = current_time - pose_start_time 
+                remaining_time = max(0, time_limit - elapsed_time)
                 
                 current_landmarks, current_pose_landmarks = self.extract_pose_landmarks(frame)
                 output_image = np.zeros((480, 1280, 3), dtype=np.uint8)
@@ -244,6 +250,15 @@ class PoseMatchingSystem:
                         self.template_landmarks[self.current_index], 
                         current_landmarks
                     )
+                    
+                    if remaining_time <= 0 and self.success_start_time is None:
+                        cv2.putText(output_image, "Time Over! Game Over!",
+                                    (int(1280/2 - 200), int(480/2)),
+                                    cv2.FONT_HERSHEY_SIMPLEX,
+                                    2,(0,0,255),3)
+                        cv2.imshow('Pose Matching',output_image)
+                        cv2.waitKey(2000)
+                        break 
 
                     blended_template = self.apply_blending_effect(
                         frame, self.similarity, current_pose_landmarks
