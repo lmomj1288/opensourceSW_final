@@ -3,6 +3,7 @@ import sys
 import os
 from pose_match_overlay_selfie import PoseMatchingSystem
 import random
+from pose_game2 import main as pose_game2_main  # pose_game2의 main 함수 import
 
 class GameSelection:
     def __init__(self):
@@ -46,13 +47,13 @@ class GameSelection:
         
         # Pose Game 옵션
         pose_color = self.GREEN if self.selected_option == 0 else self.WHITE
-        pose_text = self.font.render("1. Pose Matching Game", True, pose_color)
+        pose_text = self.font.render("1.Pose Master:Follow me", True, pose_color)
         pose_rect = pose_text.get_rect(center=(self.screen_width//2, self.screen_height//2))
         self.screen.blit(pose_text, pose_rect)
         
-        # Game 2 옵션
+        # Game 2 옵션 (수정됨)
         game2_color = self.GREEN if self.selected_option == 1 else self.WHITE
-        game2_text = self.font.render("2. Coming Soon...", True, game2_color)
+        game2_text = self.font.render("2. Random Pose Game", True, game2_color)  # 텍스트 변경
         game2_rect = game2_text.get_rect(center=(self.screen_width//2, self.screen_height//2 + 80))
         self.screen.blit(game2_text, game2_rect)
         
@@ -104,18 +105,21 @@ class GameSelection:
         menu_rect = menu_text.get_rect(center=(self.screen_width//2, self.screen_height*2//3))
         self.screen.blit(menu_text, menu_rect)
 
-    def draw_game2(self):
-        self.screen.fill(self.BLACK)
+    def run_game2(self):
+        # Pygame 창 숨기기
+        pygame.display.quit()
         
-        # Coming Soon 메시지
-        text = self.font.render("Coming Soon...", True, self.WHITE)
-        rect = text.get_rect(center=(self.screen_width//2, self.screen_height//2))
-        self.screen.blit(text, rect)
-        
-        # 메인 메뉴로 돌아가기 안내
-        back_text = self.small_font.render("Press ESC to return to main menu", True, self.BLUE)
-        back_rect = back_text.get_rect(center=(self.screen_width//2, self.screen_height*3//4))
-        self.screen.blit(back_text, back_rect)
+        try:
+            # pose_game2의 main 함수 실행
+            pose_game2_main()
+            return True
+        except Exception as e:
+            print(f"Error in Game 2: {e}")
+            return False
+        finally:
+            # Pygame 창 다시 초기화
+            self.screen = pygame.display.set_mode((self.screen_width, self.screen_height))
+            pygame.display.set_caption("Game Selection")
 
     def run_sequence_mode(self):
         try:
@@ -160,7 +164,11 @@ class GameSelection:
                             if self.selected_option == 0:
                                 self.game_state = "pose_game_mode"
                             else:
-                                self.game_state = "game2"
+                                # Game 2 실행
+                                if self.run_game2():
+                                    self.game_state = "complete"
+                                else:
+                                    self.game_state = "main_menu"
                         elif self.game_state == "pose_game_mode":
                             if self.selected_pose_mode == 0:
                                 if self.run_sequence_mode():
@@ -193,8 +201,6 @@ class GameSelection:
                 self.draw_pose_game_mode()
             elif self.game_state == "complete":
                 self.draw_complete()
-            elif self.game_state == "game2":
-                self.draw_game2()
             
             pygame.display.flip()
         
