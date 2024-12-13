@@ -190,6 +190,7 @@ class PoseMatchingSystem:
         if similarity >= 0.85:
             if self.success_start_time is None:
                 self.success_start_time = time.time()
+                pose_start_time = time.time() 
             self.match_duration += 1
             self.blend_alpha = min(0.99, self.blend_alpha + 0.1)
         else:
@@ -228,7 +229,7 @@ class PoseMatchingSystem:
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
         pose_start_time = time.time()
-        time_limit = 10 
+        time_limit = 30
         
         try:
             while True:
@@ -251,7 +252,7 @@ class PoseMatchingSystem:
                         current_landmarks
                     )
                     
-                    if remaining_time <= 0 and self.success_start_time is None:
+                    if remaining_time <= 0 and self.success_start_time is None and self.complete_time is None:
                         cv2.putText(output_image, "Time Over! Game Over!",
                                     (int(1280/2 - 200), int(480/2)),
                                     cv2.FONT_HERSHEY_SIMPLEX,
