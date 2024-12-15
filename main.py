@@ -202,7 +202,7 @@ class GameSelection:
             elif self.game_state == "complete":
                 self.draw_complete()
             
-            pygame.display.flip()
+            pygame.display.flip() # webcam 좌우반전 방지 
         
         pygame.quit()
         sys.exit()
