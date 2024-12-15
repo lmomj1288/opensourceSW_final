@@ -108,7 +108,7 @@ def main():
                     cv2.putText(frame, f'Similarity: {max_similarity:.2f}', (50, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 2, cv2.LINE_AA)
                     cv2.imshow('Charades', frame)
 
-                    if max_similarity >= 0.7:
+                    if max_similarity >= 0.8:
                         print("Correct Pose!")
                         cv2.putText(frame, 'Correct!', (50, 130), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
                         cv2.imshow('Charades', frame)
