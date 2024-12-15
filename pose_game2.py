@@ -56,7 +56,7 @@ def main():
     start_time = time.time()
     people_counts = []
 
-    while time.time() - start_time < 7: #플레이어 선택 대기 시간
+    while time.time() - start_time < 7:
         ret, frame = cap.read()
         if not ret:
             print("Error: Could not read frame from video device.")
