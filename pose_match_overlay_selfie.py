@@ -33,6 +33,7 @@ class PoseMatchingSystem:
         self.completion_announced = False 
         self.display_complete_duration = 2.0
         self.waiting_for_next = False 
+        self.pose_start_time = None 
 
     def load_templates(self, image_paths):
         for path in image_paths:
@@ -61,6 +62,7 @@ class PoseMatchingSystem:
     def next_template(self):
         self.current_index += 1
         self.reset_state()
+        self.pose_start_time = time.time()
         return self.current_index < len(self.template_images)
     
     def extract_pose_landmarks(self, image):
@@ -228,7 +230,7 @@ class PoseMatchingSystem:
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
-        pose_start_time = time.time()
+        self.pose_start_time = time.time()
         time_limit = 30
         
         try:
@@ -240,7 +242,7 @@ class PoseMatchingSystem:
                 
                 frame = cv2.flip(frame, 1)
                 current_time = time.time()
-                elapsed_time = current_time - pose_start_time 
+                elapsed_time = current_time - self.pose_start_time 
                 remaining_time = max(0, time_limit - elapsed_time)
                 
                 current_landmarks, current_pose_landmarks = self.extract_pose_landmarks(frame)

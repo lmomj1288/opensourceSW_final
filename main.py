@@ -47,7 +47,7 @@ class GameSelection:
         
         # Pose Game 옵션
         pose_color = self.GREEN if self.selected_option == 0 else self.WHITE
-        pose_text = self.font.render("1.Pose Master:Follow me", True, pose_color)
+        pose_text = self.font.render("1.Pose Matching Game", True, pose_color)
         pose_rect = pose_text.get_rect(center=(self.screen_width//2, self.screen_height//2))
         self.screen.blit(pose_text, pose_rect)
         
